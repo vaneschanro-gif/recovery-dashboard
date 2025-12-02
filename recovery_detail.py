@@ -1,4 +1,4 @@
-# app.py — FINAL VERSION: Focus Mode + Smart Search + Password
+# app.py — FINAL: ALL FILTERS + SMART SEARCH + FOCUS MODE + PASSWORD
 import streamlit as st
 import pandas as pd
 from pathlib import Path
@@ -32,53 +32,71 @@ def load_data():
     for p in paths:
         if p.exists():
             df = pd.read_excel(p, sheet_name="Detail")
-            st.success(f"Loaded **{len(df):,}** incidents")
+            st.success(f"Loaded **{len(df):,}** incidents from `{p.name}`")
             return df
     st.error("File not found!")
     st.stop()
 
 df = load_data()
 
-# Ensure Recovered01
 if "Recovered01" not in df.columns:
     df["Recovered01"] = (df["recovered"].astype(str).str.strip().str.lower() == "yes").astype(int)
 
-# === SIDEBAR FILTERS ===
+# === SIDEBAR - ALL FILTERS BACK + SMART SEARCH ===
 with st.sidebar:
     st.header("Filters")
 
-    # Date filters
-    year = st.multiselect("Year", options=sorted(df["Year"].dropna().unique()), default=[])
-    month = st.multiselect("Month", options=sorted(df["Month"].dropna().unique()), default=[])
+    st.subheader("Incident Date")
+    year = st.multiselect("Year", options=sorted(df["Year"].dropna().unique()))
+    month = st.multiselect("Month", options=sorted(df["Month"].dropna().unique()))
+    day = st.multiselect("Day", options=sorted(df["Day"].dropna().unique()))
+    hour = st.multiselect("Hour", options=sorted(df["Hour"].dropna().unique()))
 
-    st.subheader("Focus Mode (optional)")
-    focus_mode = st.checkbox("Show % of selected group vs rest")
+    st.subheader("Contract Date")
+    con_year = st.multiselect("Contract Year", options=sorted(df["ConYear"].dropna().unique()))
+    con_month = st.multiselect("Contract Month", options=sorted(df["ConMonth"].dropna().unique()))
 
-    # Smart search + dropdown for key columns
-    st.subheader("Vehicle & Product")
+    st.subheader("Focus Mode")
+    focus_mode = st.checkbox("Show % of selected group vs rest of period")
 
+    st.subheader("Vehicle & Product - SMART SEARCH")
     # Manufacturer
-    manu_search = st.text_input("Search Manufacturer (e.g. toyota)", "")
-    manu_options = sorted(df["manufacturer"].dropna().unique())
-    manu_filtered = [x for x in manu_options if manu_search.lower() in x.lower()] if manu_search else manu_options
+    manu_search = st.text_input("Search Manufacturer (e.g. toyota, nissan)", "")
+    manu_opts = sorted(df["manufacturer"].dropna().unique())
+    manu_filtered = [x for x in manu_opts if manu_search.lower() in x.lower()] if manu_search else manu_opts
     manufacturer = st.multiselect("Manufacturer", options=manu_filtered, default=manu_filtered if manu_search else [])
 
     # Model
     model_search = st.text_input("Search Model (e.g. hilux, ranger, polo)", "")
-    model_options = sorted(df["model"].dropna().unique())
-    model_filtered = [x for x in model_options if model_search.lower() in x.lower()] if model_search else model_options
+    model_opts = sorted(df["model"].dropna().unique())
+    model_filtered = [x for x in model_opts if model_search.lower() in x.lower()] if model_search else model_opts
     model = st.multiselect("Model", options=model_filtered, default=model_filtered if model_search else [])
 
     # Product Package
-    pkg_search = st.text_input("Search Product Package (e.g. earlybird, fleet)", "")
-    pkg_options = sorted(df["product_package"].dropna().unique())
-    pkg_filtered = [x for x in pkg_options if pkg_search.lower() in x.lower()] if pkg_search else pkg_options
+    pkg_search = st.text_input("Search Product Package (e.g. earlybird, beame)", "")
+    pkg_opts = sorted(df["product_package"].dropna().unique())
+    pkg_filtered = [x for x in pkg_opts if pkg_search.lower() in x.lower()] if pkg_search else pkg_opts
     product_package = st.multiselect("Product Package", options=pkg_filtered, default=pkg_filtered if pkg_search else [])
 
-    # Other filters
+    colour = st.multiselect("Colour", options=sorted(df["vehicle_colour"].dropna().unique()))
+    vehicle_year = st.multiselect("Vehicle Year", options=sorted(df["vehicle_year"].dropna().unique()))
     hardware = st.multiselect("Hardware Type", options=sorted(df["primary_hardware_type"].dropna().unique()))
+
+    st.subheader("Incident Details")
+    inc_type = st.multiselect("Incident Type", options=sorted(df["incident_type"].dropna().unique()))
+    user_type = st.multiselect("User Type", options=sorted(df["user_type"].dropna().unique()))
+    terminal = st.multiselect("Terminal Event", options=sorted(df["terminal_event_type_description"].dropna().unique()))
+    tag = st.multiselect("Tag/Asset Track", options=sorted(df["tag_or_asset_track"].dropna().unique()))
+
+    st.subheader("Exclusions & Flags")
+    warranty = st.multiselect("Warranty Base", options=sorted(df["warranty_base"].dropna().unique()))
+    device_ex = st.multiselect("Device Exclusion", options=sorted(df["device_exclusion"].dropna().unique()))
+    bike_ex = st.multiselect("Bike Exclusion", options=sorted(df["bike_exclusion"].dropna().unique()))
+    fraud = st.multiselect("Fraud", options=sorted(df["fraud"].dropna().unique()))
+    exclude = st.multiselect("Exclude Flag", options=sorted(df["Exclude"].dropna().unique()))
+
+    st.subheader("People & Sales")
     rep = st.multiselect("Business Source User", options=sorted(df["business_source_username"].dropna().unique()))
-    
     client = st.text_input("Client Name (any part)")
     user = st.text_input("User Name (any part)")
     reg = st.text_input("Registration (any part)")
@@ -89,55 +107,59 @@ with st.sidebar:
 if calculate:
     data = df.copy()
 
-    # Apply filters
-    if year: data = data[data["Year"].isin(year)]
-    if month: data = data[data["Month"].isin(month)]
-    if manufacturer: data = data[data["manufacturer"].isin(manufacturer)]
-    if model: data = data[data["model"].isin(model)]
-    if product_package: data = data[data["product_package"].isin(product_package)]
-    if hardware: data = data[data["primary_hardware_type"].isin(hardware)]
-    if rep: data = data[data["business_source_username"].isin(rep)]
+    # All standard filters
+    filter_map = [
+        (year, "Year"), (month, "Month"), (day, "Day"), (hour, "Hour"),
+        (con_year, "ConYear"), (con_month, "ConMonth"),
+        (inc_type, "incident_type"), (user_type, "user_type"),
+        (terminal, "terminal_event_type_description"), (tag, "tag_or_asset_track"),
+        (warranty, "warranty_base"), (device_ex, "device_exclusion"),
+        (bike_ex, "bike_exclusion"), (fraud, "fraud"), (exclude, "Exclude"),
+        (manufacturer, "manufacturer"), (model, "model"),
+        (colour, "vehicle_colour"), (vehicle_year, "vehicle_year"),
+        (product_package, "product_package"), (hardware, "primary_hardware_type"),
+        (rep, "business_source_username"),
+    ]
+    for values, col in filter_map:
+        if values:
+            data = data[data[col].isin(values)]
+
     if client: data = data[data["client_name"].astype(str).str.contains(client, case=False, na=False)]
-    if user: data = data[data["user_name"].astype(str).str.contains(user, case=False, na=False)]
-    if reg: data = data[data["primary_registration"].astype(str).str.contains(reg, case=False, na=False)]
+    if user:   data = data[data["user_name"].astype(str).str.contains(user, case=False, na=False)]
+    if reg:    data = data[data["primary_registration"].astype(str).str.contains(reg, case=False, na=False)]
 
     total = len(data)
     recovered = int(data["Recovered01"].sum())
     rate = recovered / total if total > 0 else 0
 
-    # Focus Mode: % of selected group vs total in time period
-    if focus_mode and (model or manufacturer or product_package):
+    # === FOCUS MODE ===
+    if focus_mode and (model or manufacturer or product_package or model_search or manu_search or pkg_search):
+        period_df = df.copy()
+        if year: period_df = period_df[period_df["Year"].isin(year)]
+        if month: period_df = period_df[period_df["Month"].isin(month)]
+        period_total = len(period_df)
+
         group_name = "Selected Group"
-        if model_search: group_name = f"Models containing '{model_search}'"
-        elif manu_search: group_name = f"{manu_search.upper()}"
-        elif pkg_search: group_name = f"Package containing '{pkg_search}'"
+        if model_search: group_name = f"Models containing '{model_search.upper()}'"
+        elif manu_search: group_name = f"{manu_search.upper()} vehicles"
+        elif pkg_search: group_name = f"Package containing '{pkg_search.upper()}'"
 
-        filtered_total = len(df)
-        if year: filtered_total = len(df[df["Year"].isin(year)])
-        if month: filtered_total = len(df[df["Month"].isin(month)])
+        group_pct = total / period_total * 100 if period_total > 0 else 0
+        overall_rate = period_df["Recovered01"].mean()
 
-        group_pct = (total / filtered_total * 100) if filtered_total > 0 else 0
-
-        st.subheader(f"Focus Mode: {group_name}")
-        col1, col2 = st.columns(2)
+        st.subheader(f"Focus: {group_name}")
+        col1, col2, col3 = st.columns(3)
         col1.metric("Incidents in Group", f"{total:,}", f"{group_pct:.1f}% of period")
-        col2.metric("Recovery Rate in Group", f"{rate:.1%}")
-
-        # Comparison to overall
-        overall_rate = df["Recovered01"].mean()
-        if year: overall_rate = df[df["Year"].isin(year)]["Recovered01"].mean()
-        if month: overall_rate = df[df["Month"].isin(month)]["Recovered01"].mean()
-
-        st.metric("Overall Recovery Rate (same period)", f"{overall_rate:.1%}", delta=f"{rate - overall_rate:.1%}")
+        col2.metric("Recovery Rate in Group", f"{rate:.1%}", delta=f"{rate - overall_rate:.1%}")
+        col3.metric("Overall Rate (same period)", f"{overall_rate:.1%}")
 
     else:
-        # Normal view
         c1, c2, c3 = st.columns(3)
         c1.metric("Total Incidents", f"{total:,}")
         c2.metric("Recovered", f"{recovered:,}")
         c3.metric("Recovery Rate", f"{rate:.1%}")
 
-    st.success(f"### Final Recovery Rate: **{rate:.1%}** ({recovered:,} / {total:,})")
+    st.success(f"### Final Rate: **{rate:.1%}** ({recovered:,}/{total:,})")
     st.balloons()
 else:
     st.info("Select filters → type in search boxes → click **CALCULATE**")
